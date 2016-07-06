@@ -27,6 +27,14 @@ String VERSION = "Version 0.0.3";
 
 const int TIME_ZONE = +1;
 
+#define INFLUXDB_INTERVAL   10 * 6000
+elapsedMillis influxdbInterval;
+#define INFLUXDB_HOST   "12345"
+#define INFLUXDB_PORT   8086
+#define INFLUXDB_DB     "12345"
+TCPClient client;
+
+
 /*******************************************************************************
  initialize FSM states with proper enter, update and exit functions
 *******************************************************************************/
@@ -71,14 +79,11 @@ elapsedMillis minimumCloseTimer;
 *******************************************************************************/
 uint8_t reedSwitch = D3;
 
-
-
 /*******************************************************************************
  BME280 sensor
 *******************************************************************************/
 #define BME280_SAMPLE_INTERVAL   5000    // Sample BME280 every 5 seconds
                                          //  this is then averaged in temperatureAverage
-
 
 CE_BME280 bme; // I2C
 
@@ -103,10 +108,6 @@ float currentHumidity = 0.0;
 String currentTempString = String(currentTemp); //String to store the target temp so it can be exposed and set
 String currentPressureString = String(currentPressure); //String to store the sensor's temp so it can be exposed
 String currentHumidityString = String(currentHumidity); //String to store the sensor's humidity so it can be exposed
-
-#define INFLUXDB_HOST ""
-#define INFLUXDB_PORT 
-#define INFLUXDB_DB ""
 
 STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
 
@@ -140,7 +141,28 @@ KeyFob fob;
 bool checkFob = false;
 bool button2pressed = false;
 bool doButton = false;
-bool status = false;;
+bool status = false;
+
+bool sendInflux(String payload) {
+    client.connect(INFLUXDB_HOST, INFLUXDB_PORT);
+    if(client.connected())
+    {
+        //Particle.publish("connected");
+    }
+    
+    client.println("POST /write?db=" + String(INFLUXDB_DB) + " HTTP/1.1");
+    client.println("Host: " + String(INFLUXDB_HOST));
+    client.println("User-Agent: Photon/1.0");
+    client.println("Connection: close");
+    client.println("Content-Type: application/json");
+    client.printlnf("Content-Length: %d", payload.length());
+    client.println();
+    client.print(payload);
+    client.println(); 
+    client.flush();
+    client.stop();
+    
+}
 
 void garageStatus()
 {
@@ -149,7 +171,7 @@ void garageStatus()
 
 void subscribeHandler(const char* event, const char* data) {
 
-  // data set to the device ID that wants to sleep.
+	// data set to the device ID that wants to sleep.
     String id = Particle.deviceID();
     // see if this was a notification from this Photon that we can sleep
     if (!strcmp(data, id.c_str())) {
@@ -158,12 +180,12 @@ void subscribeHandler(const char* event, const char* data) {
         //Particle.publish(APP_NAME, "Do Button", 60, PRIVATE);
         //Serial.println("Toggle relays");
         //relayController.turnOnRelay(1);
-    //delay(500);
-      //relayController.turnOffRelay(1);
+		//delay(500);
+	    //relayController.turnOffRelay(1);
     }
     else
     {
-      Particle.publish(APP_NAME, "deviceID didn't match", 60, PRIVATE);
+    	Particle.publish(APP_NAME, "deviceID didn't match", 60, PRIVATE);
     }
 }
 
@@ -180,7 +202,7 @@ void setup()
     Particle.variable("Humidity", currentHumidityString);
     Particle.variable("Pressure", currentPressureString);
 
-  //Setup communication to KeyFob interface module
+	//Setup communication to KeyFob interface module
     attachInterrupt(A3, evalFob, CHANGE);
     
     pinMode(reedSwitch, INPUT_PULLUP);
@@ -189,10 +211,10 @@ void setup()
     // Initialise I2C communication as Master
     Wire.begin();
     
-    Serial.begin(115200);
-  relayController.setAddress(0,0,0);
-  
-  if (!bme.begin()) {
+   	Serial.begin(115200);
+	relayController.setAddress(0,0,0);
+	
+	if (!bme.begin()) {
         Particle.publish("Could not find a valid BME280 sensor, check wiring!");
         delay(2000);
         while (1);
@@ -217,7 +239,7 @@ void loop()
     readReedSwitch();
     readFob();
 
-  garageDoorStateMachine.update();
+	garageDoorStateMachine.update();
 }
 
 /*******************************************************************************
@@ -395,58 +417,58 @@ void readFob() {
     
   //If an interrupt has fired on A3 which is connected to the fob module then a button has been pressed or released so we need to determine what button was pressed or released.
   if(checkFob){
-    checkFob = false;
-    delay(10);
-    fob.evalFob();
-    String action;
-    switch(fob.recentAction){
-    case(fob.button1press):
-      Serial.println("Button 1 pressed");
-        action = "Button1Press";
-    break;
-    case(fob.button2press):
-      Serial.println("Button 2 pressed");
-        action = "Button2Press";
-    break;
-    case(fob.button3press):
-      Serial.println("Button 3 pressed");
-        action = "Button3Press";
-    break;
-    case(fob.button4press):
-      Serial.println("Button 4 pressed");
-        action = "Button4Press";
-    break;
-    case(fob.button5press):
-      Serial.println("Button 5 pressed");
-        action = "Button5Press";
-    break;
-    case(fob.button6press):
-      Serial.println("Button 6 pressed");
-        action = "Button6Press";
-    break;
-    case(fob.button7press):
-      Serial.println("Button 7 pressed");
-        action = "Button7Press";
-    break;
-    case(fob.button8press):
-      Serial.println("Button 8 pressed");
-        action = "Button8Press";
-    break;
-    }
-    
-    if(action.equalsIgnoreCase("Button2Press")){
-        button2pressed = true;
-        Particle.publish(APP_NAME, "Button pressed", 60, PRIVATE);
-    }
+		checkFob = false;
+		delay(10);
+		fob.evalFob();
+		String action;
+		switch(fob.recentAction){
+		case(fob.button1press):
+			Serial.println("Button 1 pressed");
+		    action = "Button1Press";
+		break;
+		case(fob.button2press):
+			Serial.println("Button 2 pressed");
+		    action = "Button2Press";
+		break;
+		case(fob.button3press):
+			Serial.println("Button 3 pressed");
+		    action = "Button3Press";
+		break;
+		case(fob.button4press):
+			Serial.println("Button 4 pressed");
+		    action = "Button4Press";
+		break;
+		case(fob.button5press):
+			Serial.println("Button 5 pressed");
+		    action = "Button5Press";
+		break;
+		case(fob.button6press):
+			Serial.println("Button 6 pressed");
+		    action = "Button6Press";
+		break;
+		case(fob.button7press):
+			Serial.println("Button 7 pressed");
+		    action = "Button7Press";
+		break;
+		case(fob.button8press):
+			Serial.println("Button 8 pressed");
+		    action = "Button8Press";
+		break;
+		}
+		
+		if(action.equalsIgnoreCase("Button2Press")){
+		    button2pressed = true;
+		    Particle.publish(APP_NAME, "Button pressed", 60, PRIVATE);
+		}
 
-    if(action.equalsIgnoreCase("Button4Press")){
+		if(action.equalsIgnoreCase("Button4Press")){
                 relayController.toggleRelay(2);
                 
                 relayController.turnOnRelay(1);
-            delay(500);
-              relayController.turnOffRelay(1);
-    }
-  }
+		        delay(500);
+	            relayController.turnOffRelay(1);
+		}
+	}
 }
 
 
@@ -558,15 +580,19 @@ int publish( float temperature, float pressure, float humidity ) {
 
   //publish readings
   Particle.publish(APP_NAME, "Garage: " + currentTempString + "°C " + currentHumidityString + "% " + currentPressureString + "Pa", 60, PRIVATE);
-
+  
+  //if (influxdbInterval > INFLUXDB_INTERVAL){
+    String data = "measurement,Location=12345 Temp=" + currentTempString + ",Hum=" + currentHumidityString + ",Pres=" + currentPressureString;
+    sendInflux(data);
+    //influxdbInterval = 0;
+  //}
   return 0;
 }
 
 
 /*******************************************************************************
- * Function Name  : publish
- * Description    : the temperature/humidity passed as parameters get stored in internal variables
-                    and then published
+ * Function Name  : readReedSwitch
+ * Description    : read the status of the reed switch
  * Return         : 0
  *******************************************************************************/
 int readReedSwitch() {
@@ -578,65 +604,80 @@ int readReedSwitch() {
     return 0;
 }
 
+/*******************************************************************************
+ * Function Name  : triggerRelay
+ * Description    : trigger the relay
+ * Return         : 0
+ *******************************************************************************/
 int triggerRelay(String command){
-  if(command.equalsIgnoreCase("turnonallrelays")){
-    relayController.turnOnAllRelays();
-    return 1;
-  }
-  if(command.equalsIgnoreCase("turnoffallrelays")){
-    relayController.turnOffAllRelays();
-    return 1;
-  }
-  if(command.startsWith("setBankStatus:")){
-    int status = command.substring(14).toInt();
-    if(status < 0 || status > 255){
-      return 0;
-    }
-    Serial.print("Setting bank status to: ");
-    Serial.println(status);
-    relayController.setBankStatus(status);
-    Serial.println("done");
-    return 1;
-  }
-  //Relay Specific Command
-  int relayNumber = command.substring(0,1).toInt();
-  Serial.print("relayNumber: ");
-  Serial.println(relayNumber);
-  String relayCommand = command.substring(1);
-  Serial.print("relayCommand:");
-  Serial.print(relayCommand);
-  Serial.println(".");
-  if(relayCommand.equalsIgnoreCase("on")){
-    Serial.println("Turning on relay");
-    relayController.turnOnRelay(relayNumber);
-    Serial.println("returning");
-    return 1;
-  }
-  if(relayCommand.equalsIgnoreCase("off")){
-    relayController.turnOffRelay(relayNumber);
-    return 1;
-  }
-  if(relayCommand.equalsIgnoreCase("toggle")){
-    relayController.toggleRelay(relayNumber);
-    return 1;
-  }
-  if(relayCommand.equalsIgnoreCase("momentary")){
-    relayController.turnOnRelay(relayNumber);
-    delay(300);
-    relayController.turnOffRelay(relayNumber);
-    return 1;
-  }
-  return 0;
-  
-  
-  
+	if(command.equalsIgnoreCase("turnonallrelays")){
+		relayController.turnOnAllRelays();
+		return 1;
+	}
+	if(command.equalsIgnoreCase("turnoffallrelays")){
+		relayController.turnOffAllRelays();
+		return 1;
+	}
+	if(command.startsWith("setBankStatus:")){
+		int status = command.substring(14).toInt();
+		if(status < 0 || status > 255){
+			return 0;
+		}
+		Serial.print("Setting bank status to: ");
+		Serial.println(status);
+		relayController.setBankStatus(status);
+		Serial.println("done");
+		return 1;
+	}
+	//Relay Specific Command
+	int relayNumber = command.substring(0,1).toInt();
+	Serial.print("relayNumber: ");
+	Serial.println(relayNumber);
+	String relayCommand = command.substring(1);
+	Serial.print("relayCommand:");
+	Serial.print(relayCommand);
+	Serial.println(".");
+	if(relayCommand.equalsIgnoreCase("on")){
+		Serial.println("Turning on relay");
+		relayController.turnOnRelay(relayNumber);
+		Serial.println("returning");
+		return 1;
+	}
+	if(relayCommand.equalsIgnoreCase("off")){
+		relayController.turnOffRelay(relayNumber);
+		return 1;
+	}
+	if(relayCommand.equalsIgnoreCase("toggle")){
+		relayController.toggleRelay(relayNumber);
+		return 1;
+	}
+	if(relayCommand.equalsIgnoreCase("momentary")){
+		relayController.turnOnRelay(relayNumber);
+		delay(300);
+		relayController.turnOffRelay(relayNumber);
+		return 1;
+	}
+	return 0;
+	
+	
+	
 }
 
+/*******************************************************************************
+ * Function Name  : evalFob
+ * Description    : 
+ * Return         : 0
+ *******************************************************************************/
 void evalFob(){
-  Serial.println("Fob button pressed");
-  checkFob = true;
+	Serial.println("Fob button pressed");
+	checkFob = true;
 }
 
+/*******************************************************************************
+ * Function Name  : readAngle
+ * Description    : 
+ * Return         : 0
+ *******************************************************************************/
 float readAngle() {
     unsigned int data[2];
 
@@ -677,5 +718,3 @@ float readAngle() {
     
     return angle;
 }
-
-
